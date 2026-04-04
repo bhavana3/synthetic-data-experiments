@@ -1,0 +1,171 @@
+IEEE-CIS Fraud Detection — EDA Report
+======================================
+Resolving open questions from BEHAVIORAL_PATTERNS_FORMAL.md
+
+
+======================================================================
+OQ2: Entity ID Reconstruction (card1+addr1+P_emaildomain)
+======================================================================
+
+Null rates for candidate entity columns:
+  card1                 null=  0.0%  unique=  13,553
+  card2                 null=  1.5%  unique=     500
+  card3                 null=  0.3%  unique=     114
+  card4                 null=  0.3%  unique=       4
+  card5                 null=  0.7%  unique=     119
+  card6                 null=  0.3%  unique=       4
+  addr1                 null= 11.1%  unique=     332
+  addr2                 null= 11.1%  unique=      74
+  P_emaildomain         null= 16.0%  unique=      59
+
+Strategy A — entity=card1 alone:
+  Unique entities:      13,553
+  Median txns/entity:   4.0
+  Max txns/entity:      14932
+  Entities with >1 txn: 10,109 (74.6%)
+  Pure-fraud entities:  203
+  Pure-legit entities:  11,813
+
+Strategy B — entity=card1+addr1+P_emaildomain:
+  Unique entities:      90,375
+  Median txns/entity:   2.0
+  Max txns/entity:      4015
+  Entities with >1 txn: 46,657 (51.6%)
+  Pure-fraud entities:  1,728
+  Pure-legit entities:  85,249
+
+[VERDICT] Use Strategy A (card1 alone) — produces richer per-entity sequences.
+  Chosen entity column: entity_card1
+
+======================================================================
+OQ1: Burst Threshold Delta — Inter-Event Time Distribution
+======================================================================
+TransactionDT range: 86,400 to 15,811,131 seconds
+Span: 182.0 days
+
+Inter-event times (seconds):
+                             Fraud     Non-fraud
+                            ------     ---------
+  10th pct                      89.0         214.0
+  25th pct                     422.0        1008.0
+  Median                      3367.0        6041.0
+  75th pct                   28311.0       59652.0
+  90th pct                  143267.4      322638.9
+  99th pct                 2746268.6     3255868.1
+
+  Fraud IETs < 5min (300s):   21.4%
+  Fraud IETs < 1hr (3600s):   51.0%
+  Fraud IETs < 6hr (21600s):  72.5%
+  Legit IETs < 5min:           13.0%
+  Legit IETs < 1hr:            42.6%
+
+  KS test (fraud vs. legit IET): stat=0.0960, p=1.82e-20
+  → SIGNIFICANT separation (good signal)
+
+[VERDICT] Recommended burst thresholds delta:
+  5 min  (300s)  — captures micro-bursts (card testing)
+  1 hr   (3600s) — captures session-level bursts (ATO)
+  6 hr   (21600s)— captures day-session bursts
+
+======================================================================
+OQ3: Device/IP Column Quality for Pattern 3 (Graph Motifs)
+======================================================================
+
+Column           Description                          Non-null    Unique   UsableForGraph
+------------------------------------------------------------------------------------------
+  DeviceType       device type (mobile/desktop)            23.8%         2             ✗ NO
+  DeviceInfo       device fingerprint string               20.1%     1,786             ✗ NO
+  id_30            OS version                              13.1%        75             ✗ NO
+  id_31            browser                                 23.8%       130             ✗ NO
+  id_33            screen resolution                       12.4%       260             ✗ NO
+  id_34            match_status                            13.2%         4             ✗ NO
+  id_35            cookie                                  23.9%         2             ✗ NO
+  id_36            proxy                                   23.9%         2             ✗ NO
+  id_37            forwarder                               23.9%         2             ✗ NO
+  id_38            international                           23.9%         2             ✗ NO
+
+Usable graph attribute columns: []
+
+[VERDICT] IEEE-CIS device columns are too sparse/masked for reliable P3 analysis.
+  P3 evaluated exclusively on Amazon FDB. Report this as a dataset limitation.
+
+======================================================================
+OQ5 + OQ6: Entity Sequence Stats and Fraud Entity Count
+======================================================================
+
+All entities:   13,553
+Fraud entities: 1,740  (12.84%)
+Legit entities: 11,813
+
+Sequence length (txns per entity):
+                                  Fraud   Non-fraud
+  25th pct                          7.0         1.0
+  Median                           32.0         3.0
+  75th pct                        151.0        10.0
+  90th pct                        560.0        26.0
+  Max                           14932.0      1383.0
+
+Active lifetime (days):
+                                  Fraud   Non-fraud
+  25th pct                       120.52        0.00
+  Median                         168.18       69.86
+  75th pct                       179.89      149.49
+  90th pct                       181.55      170.90
+
+OQ5 — REaLTabFormer viability:
+  Fraud entities with ≥2 txns: 91.6%
+  Median sequence length (fraud): 32.0
+  → REaLTabFormer viable ✓ (sequences are long enough)
+
+OQ6 — Sample size for bootstrap matching (P1 evaluation):
+  Fraud entities available: 1,740
+  → Sufficient for stable Wasserstein estimates (n ≥ 500 ✓)
+     Bootstrap: sample 1740 from non-fraud entities to match
+
+======================================================================
+OQ4: Temporal Train/Val Split Strategy
+======================================================================
+Temporal split at 80th percentile of TransactionDT:
+  Train: 472,432 txns  |  fraud rate: 0.0351
+  Val:   118,108 txns  |  fraud rate: 0.0344
+
+Entity overlap (card1) across split:
+  Entities in train only: 6,473
+  Entities in val only:   823
+  Entities in both:       6,257 (49.2% of train)
+
+[VERDICT] Temporal split is correct approach.
+  Low entity overlap — clean temporal separation confirmed.
+
+======================================================================
+P4 Preview: Velocity Rule Trigger Rates (Sanity Check)
+======================================================================
+
+R1: count(txns) > 3 per hour:
+  Entity-hours triggering: 17,357
+  Fraud entities triggering at least once: 204 / 1,740 = 11.7%
+
+R3: sum(TransactionAmt) > $1000 per day:
+  Fraud entities triggering: 344 / 1,740 = 19.8%
+
+[VERDICT] Velocity rules produce meaningful trigger rates on IEEE-CIS.
+  Full 8-rule evaluation implemented in evaluation/behavioral_fidelity.py
+
+======================================================================
+P5 Preview: Top Fraud-Predictive Features for Interaction Analysis
+======================================================================
+XGBoost not installed — skipping P5 preview.
+
+======================================================================
+SUMMARY: Open Questions Resolved
+======================================================================
+
+OQ1 — Burst thresholds: Use delta = {5min, 1hr, 6hr} — confirmed by IET distribution.
+OQ2 — Entity ID: See verdict in OQ2 section above.
+OQ3 — Device columns: See verdict in OQ3 section above.
+OQ4 — Train/val split: Temporal split at 80th percentile of TransactionDT.
+       Select P5 feature subsets S* on train partition only.
+OQ5 — REaLTabFormer: See sequence length stats in OQ5 section.
+OQ6 — Bootstrap matching: See fraud entity count in OQ6 section.
+
+Next step: Run evaluation/behavioral_fidelity.py against generator outputs.

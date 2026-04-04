@@ -1,0 +1,45 @@
+cat > .gitignore << 'EOF'
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# MacOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode / JetBrains
+.vscode/
+.idea/
+
+# Logs and reports
+*.log
+
+# Large raw data (keep this repo lighter)
+data/amazon_fdb/*.csv
+data/ieee_cis/*.csv
+
+# Synthetic outputs (optional – comment out if you want them in git)
+synthetic/*.csv
+synthetic1/*.csv
+
+# paper for now
+paper/*
+
+# results - benchmarking outputs
+results/benchmark/*.csv
+
+*.md
+
+EOF
